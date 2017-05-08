@@ -1,0 +1,181 @@
+---
+title: "Untitled"
+output: pdf_document
+---
+
+## Credit Card Fraud Detection ##
+
+Many Financial institutions across the Globe are faced with various kinds of frauds. This project deals with one of them and that is Credit Card Frauds. The main aim of this project is to develop a Credit Card Fraud Detection using various techniques. The main problem with this kind of data is the imbalance between the fraud and non-fradulent transactions which is a major challenge in developing an accurate prediction model. This can be classified as Imbalanced Classification. The term imbalanced refer to the disparity encountered in the dependent (response) variable. Therefore, an imbalanced classification is one in which the dependent variable has imbalanced proportion of classes. In other words, a data set that exhibits an unequal distribution between its classes is considered to be imbalanced. 
+
+## Library ##
+
+```{r echo = FALSE}
+library(ROSE)
+library(rpart)
+library(caret)
+library(kernlab)
+```
+
+
+## Data ##
+
+```{r echo = FALSE}
+setwd("C:/Program Files/RStudio/creditcard_fraud")
+DataCreditCard <- read.csv("creditcard.csv", header = TRUE)
+```
+
+
+## Initial Data Findings ##
+
+```{r echo = FALSE}
+str(DataCreditCard)
+
+```
+
+The basic structure of the credit card data provides following initial details:-
+
+1. The dataset has in total 284,807 transactions
+
+2. Out of which only 492 are classified as fraud transaction
+
+3. This shows that 0.172% of all transactions are fraud transactions
+
+4. Columns V1 to V28 have been tranformed using PCA due to privacy reasons
+
+5. Time column displays seconds elasped between each transaction and the first transaction
+
+6. Amount column displays transaction amount
+
+7. Lastly class column is a response variable and takes only binary values such as 1 for fraud
+   transactions and 0 for otherwise
+   
+ 
+## Getting Data Ready for Analysis ## 
+
+As you can see, the data set contains 31 variable. Class is the response variable. While Time, V1 to V28 and Amount are dependent variables. Let's check the severity of imbalance in this data set:
+
+```{r echo = FALSE}
+DataCreditCard <- data.frame(DataCreditCard)
+DataCreditCard$Class <- as.factor(DataCreditCard$Class)
+str(DataCreditCard)
+table(DataCreditCard$Class)
+
+# check class distribution
+prop.table(table(DataCreditCard$Class))
+
+# Create Data Partion
+inTrain <- createDataPartition(y = DataCreditCard$Class, p = 0.75, list = FALSE)
+training <- DataCreditCard[inTrain, ]
+testing <- DataCreditCard[-inTrain, ]
+
+# Build a decision tree model
+tree <- rpart(Class~., data = training)
+PredictionTree <- predict(tree, newdata = testing)
+
+# Accuracy of this model
+accuracy.meas(testing$Class, PredictionTree[,2])
+
+#These metrics provide an interesting interpretation. With threshold value as 0.5, Precision = 0.8 says there are some false positives. Recall = 0.77 is low and indicates that we have more  number of false negatives. F = 0.413 is also low and suggests weak accuracy of this model.
+
+roc.curve(testing$Class, PredictionTree[,2], plotit = F)
+
+#AUC = 0.90 is a low score. Therefore, it is necessary to balance data before applying a machine learning algorithm.
+```
+
+As we see, this data set contains only 1% of positive cases and 99% of negative cases. This is a severely imbalanced data set. We'll use the sampling techniques and try to improve this prediction accuracy.
+   
+## Methods Used for Analysis of Imbalanced Dataset ##
+
+The methods that I am using are called Sampling Methods. These methods aim to modify an imbalanced data into balanced distribution. The modification occurs by altering the size of original data set and provide the same proportion of balance. Following are the sampling methods that will used in my analysis:-
+
+1. Undersampling
+2. Oversampling
+3. Synthetic Data Generation
+4. Cost Sensitive Learning
+
+# Oversampling ##
+
+```{r echo = FALSE}
+data_oversamp <- ovun.sample(Class ~ ., data = training, method = "over",N = 426474)$data
+table(data_oversamp$Class)
+```
+
+In this case, originally we had 213237 negative observations. So, I instructed this line of code to over sample minority class until it reaches 213237 and the total data set comprises of 426474 samples.
+
+## Undersampling ##
+
+```{r echo = FALSE}
+data_undersamp <- ovun.sample(Class ~ ., data = training, method = "under", N = 738,
+                              seed = 1)$data
+table(data_undersamp$Class)
+```
+
+## Balanced Both ##
+
+```{r echo = FALSE}
+data_balboth <- ovun.sample(Class ~ ., data = training, method = "both", p = 0.5,
+                            N = 213606, seed = 1)$data
+table(data_balboth$Class)
+```
+
+## Syntehtic Data Generation ##
+
+```{r echo = FALSE}
+data_rose <- ROSE(Class ~ ., data = training, seed = 1)$data
+table(data_rose$Class)
+```
+
+This generated data has size equal to the original data set (213606 observations). Now, we've balanced data sets using 4 techniques. Let's compute the model using each data and evaluate its accuracy.
+
+## Build Decision Tree Models ##
+
+```{r echo = FALSE}
+tree_rose <- rpart(Class ~ ., data = data_rose)
+tree_over <- rpart(Class ~ ., data = data_oversamp)
+tree_under <- rpart(Class ~ ., data = data_undersamp)
+tree_both <- rpart(Class ~ ., data = data_balboth)
+```
+
+
+## Prediction on unseen data ##
+
+```{r echo = FALSE}
+pred_tree_rose <- predict(tree_rose, newdata = testing)
+pred_tree_over <- predict(tree_over, newdata = testing)
+pred_tree_under <- predict(tree_under, newdata = testing)
+pred_tree_both <- predict(tree_both, newdata = testing)
+```
+
+
+## Accuracy of Models ##
+
+```{r echo = FALSE}
+
+# AUC ROSE
+roc.curve(testing$Class, pred_tree_rose[, 2])
+
+# AUC Oversampling 
+roc.curve(testing$Class, pred_tree_over[, 2])
+
+# AUC Undersampling
+roc.curve(testing$Class, pred_tree_under[, 2])
+
+# AUC Both
+roc.curve(testing$Class, pred_tree_both[, 2])
+
+
+
+ROSE_holdout <- ROSE.eval(Class ~ ., data = training, learner = rpart, 
+                          method.assess = "holdout", extr.pred = function(obj)obj[, 2],
+                          seed = 1)
+ROSE_holdout
+```
+
+## Conclusion ##
+
+Hence, we get the highest accuracy from data obtained using Over, Under and Both algorithm. 
+Another method to check the model accuracy is using holdout and bagging. This helps us to ensure that our resultant predictions doesn't suffer from high variance.
+
+We see that our accuracy retains at ~ 0.93 and shows that our predictions aren't suffering from high variance. 
+
+
